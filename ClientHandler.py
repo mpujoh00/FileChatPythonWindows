@@ -1,7 +1,7 @@
+import os.path
 from threading import Thread
-import threading
-from time import sleep
 from pathlib import Path
+
 
 class ClientHandler(Thread):
     def __init__(self, socket, database):
@@ -11,13 +11,18 @@ class ClientHandler(Thread):
         self.address = socket[1]
         self.database = database
         self.currentUser = None
+        self.client = ""
         print("Connection established with client: ", self.address)
 
     def run(self):
+        # indicates what server it is
+        self.send_message("python")
+        # gets what client it is
+        self.client = self.read_message()
         # login or registration
         print(" - Asking to login or register")
         run = True
-        quit = False
+        quitApp = False
         while run:
             self.send_message("What do you want to do?\n\ta. Login\n\tb. Register\n\tc.Quit\nChoice:")
             choice = self.read_message()
@@ -38,16 +43,17 @@ class ClientHandler(Thread):
                 print(" - Disconnecting client " + str(self.address) + " from the server")
                 self.send_message("Goodbye!")
                 run = False
-                quit = True
+                quitApp = True
             else:
                 print(" - Incorrect choice, trying again")
                 self.send_message("Incorrect choice, try again\n")
 
         # main menu
-        while not quit:
+        while not quitApp:
             print(" - Displaying menu")
-            self.send_message("What do you want to do?\n\ta. Check user's state\n\tb. Send file\n\tc. Refresh received files"
-                              "\n\td. Change file extensions\n\te. Quit\nChoice:")
+            self.send_message(
+                "What do you want to do?\n\ta. Check user's state\n\tb. Send file\n\tc. Refresh received files"
+                "\n\td. Change file extensions\n\te. Quit\nChoice:")
             choice = self.read_message()
             if choice == "a":
                 # checks another user's state
@@ -70,7 +76,7 @@ class ClientHandler(Thread):
                 print(" - Disconnecting client '" + self.currentUser.username + "' from the server")
                 self.send_message("Goodbye!")
                 self.database.disconnect_user(self.currentUser.username)
-                quit = True
+                quitApp = True
             else:
                 # incorrect choice
                 print(" - Trying to choose a menu option again")
@@ -81,9 +87,8 @@ class ClientHandler(Thread):
         username = self.read_message()
         if username == "q":
             return
-        print("Username: " + username)
         friend = self.database.get_user(username)
-        if friend is null:
+        if friend is None:
             print(" - User doesn't exist")
             self.send_message("That user doesn't exist\n")
         elif friend.isAvailable:  # friend is connected
@@ -109,7 +114,7 @@ class ClientHandler(Thread):
                 self.send_message("Username doesn't exist, try again\n")
             elif friendUsername == self.currentUser.username:  # same current user
                 print(" - Same user")
-                self.send_message("You can't open a chat with yourself, try again\n")
+                self.send_message("You can't send a file to yourself, try again\n")
             elif not friend.isAvailable:  # friend is disconnected
                 print(" - User is disconnected")
                 self.send_message("The user is disconnected, can't send message\n")
@@ -120,8 +125,8 @@ class ClientHandler(Thread):
                     self.send_message("What file do you want to send?")
                     # gets file size
                     print(" - Reading file from client")
-                    filesize = int(self.read_message())
-                    if filesize > 65536:
+                    fileSize = int(self.read_message())
+                    if fileSize > 65536:
                         self.send_message("File too big (only allowed up to 64kb), try again\n")
                         continue
                     else:
@@ -131,7 +136,6 @@ class ClientHandler(Thread):
                     # checks if the user chose a file
                     if filename == "q":
                         break
-                    print("File name: " + filename)
                     filename = filename.split("[")[0]
                     # checks if the file extension is accepted by the other user
                     fileExtension = filename.split(".")[1]
@@ -139,15 +143,16 @@ class ClientHandler(Thread):
                     # invalid file extension
                     if fileExtension not in acceptedExtensions:
                         print(" - File extension not valid")
-                        self.send_message("File extension not accepted, only valid: " + friend.extensions + ". Try again\n")
+                        self.send_message("File extension not accepted, only valid: " + friend.extensions +
+                                          ". Try again\n")
                     else:  # correct file extension
                         self.send_message("ok")
                         filename = "files/" + filename
-                        # gets file byte array size
-                        fileSize = int.from_bytes(self.connection.recv(1024), byteorder='big', signed=False)
-                        print("File byte array size: " + str(fileSize))
-                        # gets file
-                        file = self.read_file(filename, fileSize)
+                        # reads file
+                        if self.client == "java":
+                            self.read_file_java(filename, fileSize)
+                        else:
+                            self.read_file_python(filename, fileSize)
                         # saves file to database
                         print(" - Uploading file to database")
                         self.database.upload_file(friend.id, self.currentUser.id, filename)
@@ -155,15 +160,44 @@ class ClientHandler(Thread):
                         break
                 break
 
-    # reads file from socket
-    def read_file(self, filename, size):
+    # reads a file sent over a java socket
+    def read_file_java(self, filename, fileSize):
+        # creates path if it didn't exist
+        if not os.path.exists(os.path.dirname(filename)):
+            try:
+                os.makedirs(os.path.dirname(filename))
+            except OSError as exc:
+                if exc.errno != errno.EEXIST:
+                    raise
+        # reads file
         file = open(filename, "wb")
-        while size > 0:
+        while fileSize > 0:
             data = self.connection.recv(1024)
             file.write(data)
-            size -= len(data)
+            fileSize -= len(data)
         file.close()
-        return file
+
+    # reads a file sent over a python socket
+    def read_file_python(self, filename, fileSize):
+        # creates path if it didn't exist
+        if not os.path.exists(os.path.dirname(filename)):
+            try:
+                os.makedirs(os.path.dirname(filename))
+            except OSError as exc:
+                if exc.errno != errno.EEXIST:
+                    raise
+        file = open(filename, "wb")
+        readBytes = 0
+        while fileSize != readBytes:
+            # reception confirmation message
+            self.send_message("ok")
+            # reads bytes
+            line = self.connection.recv(8192)
+            # writes to file
+            file.write(line)
+            # updates amount of read bytes
+            readBytes += len(line)
+        file.close()
 
     # checks if there is any new file received
     def received_files(self):
@@ -184,7 +218,8 @@ class ClientHandler(Thread):
                 print("- File received by user")
             self.send_message("")
             # removes files from database
-            for file in files:  self.database.delete_file(file.id)
+            for file in files:
+                self.database.delete_file(file.id)
 
     # sends file to socket
     def send_file(self, filename):
@@ -238,12 +273,10 @@ class ClientHandler(Thread):
             username = self.read_message()
             if username == "q":
                 return None
-            print("Username: " + username)
             self.send_message("Introduce your password (q):")
             password = self.read_message()
             if password == "q":
                 return None
-            print("Password: " + password)
             # check if the data is correct
             user = self.database.get_user(username)
             if user is None:
@@ -252,12 +285,12 @@ class ClientHandler(Thread):
             elif user.password != password:
                 self.send_message("Incorrect password, try again\n")
                 print(" - Trying to login again")
-            elif user.isAvailable == True:
+            elif user.isAvailable:
                 self.send_message("That user is already connected, try again\n")
                 print(" - Trying to login again")
             else:
                 self.send_message("Correct data, logging in...\n")
-                print(" - Loggin in...")
+                print(" - Logging in...")
                 user.isAvailable = True
                 self.database.connect_user(username)
                 return user
@@ -268,12 +301,10 @@ class ClientHandler(Thread):
             username = self.read_message()
             if username == "q":
                 return None
-            print("Username: " + username)
             self.send_message("Introduce your new password (q):")
             password = self.read_message()
             if password == "q":
                 return None
-            print("Password: " + password)
             # checks if the username already exists
             user = self.database.get_user(username)
             if user is None:
@@ -289,4 +320,4 @@ class ClientHandler(Thread):
         self.connection.send(bytes(message + "\r\n", "UTF-8"))
 
     def read_message(self):
-        return self.connection.recv(1024).decode(encoding="UTF-8")
+        return self.connection.recv(1024).decode(encoding="UTF-8").rstrip()

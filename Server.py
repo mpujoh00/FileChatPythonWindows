@@ -29,16 +29,21 @@ class Server:
         print("Python server listening on ip: " + self.HOST + " port: " + str(self.PORT))
 
         while True:
+            print("Waiting for a client connection request")
             # accepts connection with a client and creates a thread for it
             ClientHandler(self.socketServer.accept(), self.database).start()
 
     def keep_database_alive(self):
         global stopDatabase
         while not stopDatabase:
-            time.sleep(90)
+            time.sleep(5)
             self.database.keep_alive()
 
     def stop_server(self):
         global stopDatabase
         stopDatabase = True
         self.socketServer.close()
+
+
+server = Server()
+server.start_server()

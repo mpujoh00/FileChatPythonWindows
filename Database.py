@@ -9,8 +9,7 @@ from User import User
 class Database:
     def __init__(self):
         try:
-            self.connection = connector.connect(user='dq2fDwEP6r', password='eCSdwdyUFv', host='www.remotemysql.com',
-                                                database='dq2fDwEP6r')
+            self.connection = connector.connect(host="localhost", user="root", passwd="", database='file_chat')
         except mysql.connector.Error as err:
             if err.errno == errorcode.ER_ACCESS_DENIED_ERROR:
                 print("Something is wrong with your user name or password")
@@ -99,10 +98,15 @@ class Database:
         return files
 
     def keep_alive(self):
-        cursor = self.connection.cursor(buffered=True)
-        query = "SELECT 1 AS keep_alive"
-        cursor.execute(query)
-        cursor.close()
+        try:
+            self.connection = connector.connect(host="localhost", user="root", passwd="", database='file_chat')
+        except mysql.connector.Error as err:
+            if err.errno == errorcode.ER_ACCESS_DENIED_ERROR:
+                print("Something is wrong with your user name or password")
+            elif err.errno == errorcode.ER_BAD_DB_ERROR:
+                print("Database does not exist")
+            else:
+                print(err)
 
     def close_connection(self):
         self.connection.close()
