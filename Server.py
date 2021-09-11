@@ -18,7 +18,7 @@ class Server:
         self.databaseThread.start()
         # creates server socket
         self.HOST = '127.0.0.1'
-        self.PORT = 2021
+        self.PORT = 2022
         self.socketServer = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     def start_server(self):
