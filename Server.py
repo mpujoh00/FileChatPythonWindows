@@ -10,7 +10,12 @@ global stopDatabase
 class Server:
     def __init__(self):
         # database
-        self.database = Database()
+        try:
+            self.database = Database()
+        except Exception:
+            # database connection fail, can't run without database
+            raise
+
         # keeps it alive
         global stopDatabase
         stopDatabase = False
@@ -44,6 +49,8 @@ class Server:
         stopDatabase = True
         self.socketServer.close()
 
-
-server = Server()
-server.start_server()
+try:
+    server = Server()
+    server.start_server()
+except Exception:
+    print("Couldn't connect to the database")

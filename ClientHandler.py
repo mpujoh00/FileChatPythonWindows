@@ -1,12 +1,14 @@
 import os.path
+import sys
 from threading import Thread
 from pathlib import Path
+import socket
 
 
 class ClientHandler(Thread):
     def __init__(self, socket, database):
         Thread.__init__(self)
-        self.socket = socket
+        self.sock = socket
         self.connection = socket[0]
         self.address = socket[1]
         self.database = database
@@ -18,9 +20,33 @@ class ClientHandler(Thread):
         # indicates what server it is
         self.send_message("python")
         # gets what client it is
-        self.client = self.read_message()
-        # login or registration
+        try:
+            self.client = self.read_message()
+        except socket.error:
+            # client fail
+            print("Client: " + str(self.address) + " unexpectedly disconnected")
+            sys.exit()
+
+        # login or registration menu
         print(" - Asking to login or register")
+        quitApp = True
+        try:
+            quitApp = self.show_login_menu()
+        except socket.error:
+            # client fail
+            print("Client: " + str(self.address) + " unexpectedly disconnected")
+            sys.exit()
+
+        # main menu
+        try:
+            self.show_menu(quitApp)
+        except socket.error:
+            # client fail
+            print("Client: " + str(self.address) + " unexpectedly disconnected")
+            # disconnects user
+            self.database.disconnect_user(self.currentUser.username)
+
+    def show_login_menu(self):
         run = True
         quitApp = False
         while run:
@@ -47,8 +73,9 @@ class ClientHandler(Thread):
             else:
                 print(" - Incorrect choice, trying again")
                 self.send_message("Incorrect choice, try again\n")
+        return quitApp
 
-        # main menu
+    def show_menu(self, quitApp):
         while not quitApp:
             print(" - Displaying menu")
             self.send_message(
@@ -106,7 +133,6 @@ class ClientHandler(Thread):
             friendUsername = self.read_message()
             if friendUsername == "q":
                 return
-            print("Username: " + friendUsername)
             # check if friend's user exists
             friend = self.database.get_user(friendUsername)
             if friend is None:  # friend doesn't exists
@@ -317,7 +343,13 @@ class ClientHandler(Thread):
                 print(" - Trying to register again")
 
     def send_message(self, message):
-        self.connection.send(bytes(message + "\r\n", "UTF-8"))
+        try:
+            self.connection.send(bytes(message + "\r\n", "UTF-8"))
+        except socket.error:
+            pass
 
     def read_message(self):
-        return self.connection.recv(1024).decode(encoding="UTF-8").rstrip()
+        try:
+            return self.connection.recv(1024).decode(encoding="UTF-8").rstrip()
+        except socket.error:
+            raise

@@ -10,13 +10,8 @@ class Database:
     def __init__(self):
         try:
             self.connection = connector.connect(host="localhost", user="root", passwd="", database='file_chat')
-        except mysql.connector.Error as err:
-            if err.errno == errorcode.ER_ACCESS_DENIED_ERROR:
-                print("Something is wrong with your user name or password")
-            elif err.errno == errorcode.ER_BAD_DB_ERROR:
-                print("Database does not exist")
-            else:
-                print(err)
+        except mysql.connector.Error:
+            raise
         else:
             print("Successfully connected to the database")
 
@@ -56,7 +51,6 @@ class Database:
         cursor.close()
         # user exists
         if user is not None:
-            print(user)
             return User(user[0], user[1], user[2], user[3], user[4])
         # user doesn't exist
         else:
